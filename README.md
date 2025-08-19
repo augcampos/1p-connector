@@ -4,9 +4,13 @@ Bash Script to serve as a connector from 1Password manager and command tools ssh
 # Install
 
 ## All in one script
+```sh
 - wget -qO- https://raw.githubusercontent.com/augcampos/1p-connector/main/install.sh  | sh -s --
+```
 OR
+```sh
 - curl -fsSL https://raw.githubusercontent.com/augcampos/1p-connector/main/install.sh | sh -s --
+```
 
 ## Manual Install 
 - Download 1p-connector

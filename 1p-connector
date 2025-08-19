@@ -1,0 +1,113 @@
+#!/bin/bash
+# REQUIRES: 1Password CLI, jq, sshpass
+# USAGE: 1p-connect.sh <ssh|scp|rsync|sftp> <1Password Item Name> [args...]
+# ALIAS: alias ssh='1p-connect.sh <ssh|scp|rsync|sftp>
+
+set -euo pipefail
+
+# Unified logging
+log() {
+  local level="$1"; shift
+  local msg="$*"
+  case "$level" in
+    info)       echo -e "\033[0;36mℹ️  INFO:\033[0m $msg" ;;
+    warn)       echo -e "\033[1;33m⚠️  WARNING:\033[0m $msg" ;;
+    error)      echo -e "\033[0;31m❌ ERROR:\033[0m $msg" ;;
+    success)    echo -e "\033[0;32m✅ SUCCESS:\033[0m $msg" ;;
+    *)          echo -e "$msg" ;;
+  esac
+}
+
+# Validate input
+if [[ $# -lt 2 ]]; then
+  log error "Usage: $0 <ssh|scp|rsync|sftp> <1Password Item Name> [args...]"
+  exit 1
+fi
+
+CMD="$1"
+ITEM_NAME="$2"
+shift 2
+CMD_ARGS=("$@")
+CATEGORY="Server"
+SSH_DIR="$HOME/.ssh"
+KEY_PATH="$SSH_DIR/$ITEM_NAME"
+PORT=""
+USERNAME=""
+HOST=""
+
+# Sign in to 1Password
+eval "$(op signin)"
+
+# Get item ID
+ITEM_ID=$(op item list --categories "$CATEGORY" --format json | jq -r --arg name "$ITEM_NAME" '.[] | select(.title == $name) | .id')
+
+# Fallback if item not found
+if [[ -z "$ITEM_ID" ]]; then
+  log warn "Item \"$ITEM_NAME\" not found in 1Password category \"$CATEGORY\"."
+  log info "Falling back to native $CMD command..."
+  $CMD "$ITEM_NAME" "${CMD_ARGS[@]}"
+  exit $?
+fi
+
+log info "Found Item ID: $ITEM_ID"
+ITEM_JSON=$(op item get "$ITEM_ID" --format json)
+
+# Extract fields
+HOST=$(echo "$ITEM_JSON" | jq -r '.fields[] | select(.label=="host" or .label=="hostname" or .label=="ip") | .value' | head -n1)
+[[ -z "$HOST" ]] && HOST="$ITEM_NAME"
+
+PORT=$(echo "$ITEM_JSON" | jq -r '.fields[] | select(.label=="port") | .value' || true)
+PORT_ARG=()
+[[ -n "$PORT" ]] && PORT_ARG=(-P "$PORT")
+
+USERNAME=$(echo "$ITEM_JSON" | jq -r '.fields[] | select(.label=="username") | .value' || true)
+[[ -z "$USERNAME" ]] && USERNAME="$USER"
+
+# SSH URI
+build_uri() {
+  echo "$USERNAME@$HOST"
+}
+
+# Key reference
+KEY_ID=$(echo "$ITEM_JSON" | jq -r '.fields[] | select(.type=="REFERENCE") | .value' || true)
+if [[ -n "$KEY_ID" ]]; then
+  log info "Found SSH Key reference: $KEY_ID"
+  KEY_ITEM=$(op item get "$KEY_ID" --format json)
+  KEY_NAME=$(echo "$KEY_ITEM" | jq -r '.title')
+  KEY_PUB=$(echo "$KEY_ITEM" | jq -r '.fields[] | select(.id=="public_key") | .value')
+  KEY_PATH="$SSH_DIR/1p_${KEY_NAME}.pub"
+
+  if [[ ! -f "$KEY_PATH" ]]; then
+    log info "Downloading public key to $KEY_PATH"
+    echo "$KEY_PUB" > "$KEY_PATH"
+    chmod 600 "$KEY_PATH"
+  fi
+fi
+
+# Execute command
+URI=$(build_uri)
+
+if [[ -f "$KEY_PATH" ]]; then
+  log info "Using SSH key for $ITEM_NAME"
+  case "$CMD" in
+    ssh) ssh -o IdentitiesOnly=yes -i "$KEY_PATH" "${PORT_ARG[@]}" "$URI" "${CMD_ARGS[@]}" ;;
+    scp) scp -i "$KEY_PATH" "${CMD_ARGS[@]}" ;;
+    rsync) rsync -e "ssh -i $KEY_PATH" "${CMD_ARGS[@]}" ;;
+    sftp) sftp -i "$KEY_PATH" "${PORT_ARG[@]}" "$URI" ;;
+    *) log error "Unsupported command: $CMD"; exit 1 ;;
+  esac
+else
+  PASS=$(echo "$ITEM_JSON" | jq -r '.fields[] | select(.label=="password") | .value' || true)
+  if [[ -z "$USERNAME" || -z "$PASS" ]]; then
+    log error "Missing required fields (username/password) in 1Password item."
+    exit 1
+  fi
+  log info "Using password for $ITEM_NAME"
+  case "$CMD" in
+    ssh)    SSH_AUTH_SOCK=none sshpass -p "$PASS" ssh -o IdentitiesOnly=yes "${PORT_ARG[@]}" "$URI" "${CMD_ARGS[@]}" ;;
+    scp)    SSH_AUTH_SOCK=none sshpass -p "$PASS" scp "${CMD_ARGS[@]}" ;;
+    rsync)  SSH_AUTH_SOCK=none sshpass -p "$PASS" rsync -e "ssh" "${CMD_ARGS[@]}" ;;
+    sftp)   SSH_AUTH_SOCK=none sshpass -p "$PASS" sftp "${PORT_ARG[@]}" "$URI" ;;
+    *) log error "Unsupported command: $CMD"; exit 1 ;;
+  esac
+fi

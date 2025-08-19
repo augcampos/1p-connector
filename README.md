@@ -51,6 +51,8 @@ Create a [1Password Server item](https://support.1password.com/item-categories/#
 - Related item: associate an SSH key item if you use key-based auth
 - Password: used when no SSH key is available
 
+You can target a specific category by setting `OP_CATEGORY` (defaults to `Server`).
+
 Examples (replace NAME with your 1Password Server item name):
 
 ```sh
@@ -68,8 +70,16 @@ Examples (replace NAME with your 1Password Server item name):
 ```
 
 Behavior notes:
-- If a related SSH key exists, it will be used as the SSH identity file.
-- If no key is present, the script will attempt password auth (requiring `sshpass`).
+- If a related SSH key exists, it will be used as the SSH identity file. The private key is written to a secure temporary file (0600) and deleted on exit.
+- If no key is present, the script will attempt password auth (requires `sshpass`).
+- For `scp` and `rsync`, arguments that start with `NAME:` are rewritten to `user@host:` automatically.
+- Port is respected for `ssh` (`-p`), `sftp`/`scp` (`-P`), and via `-e "ssh -p ..."` for `rsync`.
+
+Show help:
+
+```sh
+1p-connector --help
+```
 
 ## Diagrams
 
@@ -87,6 +97,7 @@ Example Server item (how a real item might look in 1Password):
 - The installer may attempt to install `op`, `jq`, and `sshpass` using your package manager; if automatic install fails, install them manually.
 - Piping remote scripts directly to `sh` executes code from the internet — inspect the script before running if you require assurance.
 - Ensure `op` is authenticated (signed in) before running commands that need secrets from 1Password.
+- The temporary private key file is removed on exit. On systems without `shred`, a simple `rm` is used.
 
 ## Uninstall
 

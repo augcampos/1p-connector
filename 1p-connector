@@ -1,113 +1,221 @@
-#!/bin/bash
-# REQUIRES: 1Password CLI, jq, sshpass
-# USAGE: 1p-connect.sh <ssh|scp|rsync|sftp> <1Password Item Name> [args...]
-# ALIAS: alias ssh='1p-connect.sh <ssh|scp|rsync|sftp>
+#!/usr/bin/env bash
+# REQUIRES: 1Password CLI (op), jq, sshpass (for password auth)
+# USAGE: 1p-connector <ssh|scp|rsync|sftp> <1Password Item Name> [args...]
+# Example:
+#   1p-connector ssh NAME -- uptime
+#   1p-connector scp NAME:/remote/file ./local/file
+#   1p-connector rsync -av NAME:/remote/dir ./local/dir
 
 set -euo pipefail
+IFS=$'\n\t'
 
-# Unified logging
+# --- Config ---
+CATEGORY_DEFAULT="Server"
+CATEGORY="${OP_CATEGORY:-$CATEGORY_DEFAULT}"
+SSH_DIR="$HOME/.ssh"
+
+# --- Logging ---
 log() {
-  local level="$1"; shift
+  local level="$1"; shift || true
   local msg="$*"
   case "$level" in
-    info)       echo -e "\033[0;36mℹ️  INFO:\033[0m $msg" ;;
-    warn)       echo -e "\033[1;33m⚠️  WARNING:\033[0m $msg" ;;
-    error)      echo -e "\033[0;31m❌ ERROR:\033[0m $msg" ;;
-    success)    echo -e "\033[0;32m✅ SUCCESS:\033[0m $msg" ;;
-    *)          echo -e "$msg" ;;
+    info)    printf "\033[0;36m[INFO]\033[0m %s\n" "$msg" ;;
+    warn)    printf "\033[1;33m[WARN]\033[0m %s\n" "$msg" ;;
+    error)   printf "\033[0;31m[ERROR]\033[0m %s\n" "$msg" ;;
+    success) printf "\033[0;32m[SUCCESS]\033[0m %s\n" "$msg" ;;
+    *)       printf "%s\n" "$msg" ;;
   esac
 }
 
-# Validate input
+die() { log error "$*"; exit 1; }
+
+usage() {
+  cat <<USAGE
+Usage: $0 <ssh|scp|rsync|sftp> <1Password Item Name> [args...]
+
+Examples:
+  $0 ssh NAME -- uptime
+  $0 scp NAME:/remote/file ./local/file
+  $0 rsync -av NAME:/remote/dir ./local/dir
+  $0 sftp NAME
+
+ENV:
+  OP_CATEGORY   Override 1Password category to search (default: ${CATEGORY_DEFAULT})
+USAGE
+}
+
+# --- Input Validation ---
+if [[ ${1-} == "-h" || ${1-} == "--help" ]]; then
+  usage; exit 0
+fi
+
 if [[ $# -lt 2 ]]; then
-  log error "Usage: $0 <ssh|scp|rsync|sftp> <1Password Item Name> [args...]"
-  exit 1
+  usage; exit 1
 fi
 
 CMD="$1"
 ITEM_NAME="$2"
 shift 2
 CMD_ARGS=("$@")
-CATEGORY="Server"
-SSH_DIR="$HOME/.ssh"
-KEY_PATH="$SSH_DIR/$ITEM_NAME"
-PORT=""
-USERNAME=""
-HOST=""
 
-# Sign in to 1Password
-eval "$(op signin)"
+# --- Requirements ---
+require_cmd() { command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"; }
 
-# Get item ID
-ITEM_ID=$(op item list --categories "$CATEGORY" --format json | jq -r --arg name "$ITEM_NAME" '.[] | select(.title == $name) | .id')
+require_cmd jq
+require_cmd op
 
-# Fallback if item not found
-if [[ -z "$ITEM_ID" ]]; then
-  log warn "Item \"$ITEM_NAME\" not found in 1Password category \"$CATEGORY\"."
-  log info "Falling back to native $CMD command..."
-  $CMD "$ITEM_NAME" "${CMD_ARGS[@]}"
-  exit $?
+# --- 1Password session check ---
+if ! op whoami >/dev/null 2>&1; then
+  log warn "You're not signed in to 1Password CLI. Let's run: op signin"
+  op signin
+  if ! op whoami >/dev/null 2>&1; then
+    die "1Password CLI authentication required."
+  fi
 fi
 
-log info "Found Item ID: $ITEM_ID"
+# --- Get 1Password Item ---
+ITEM_ID=$(op item list --categories "$CATEGORY" --format json | jq -r --arg name "$ITEM_NAME" 'map(select(.title == $name)) | if length==1 then .[0].id else "" end')
+
+if [[ -z "$ITEM_ID" ]]; then
+  log warn "Item '$ITEM_NAME' not found in 1Password category '$CATEGORY'."
+  case "$CMD" in
+    ssh|sftp)
+      log info "Falling back to native $CMD using '$ITEM_NAME' as host."
+      "$CMD" "$ITEM_NAME" "${CMD_ARGS[@]}"; exit $?
+      ;;
+    scp|rsync)
+      log warn "Cannot resolve remote placeholder without 1Password item. Running command unchanged."
+      "$CMD" "${CMD_ARGS[@]}"; exit $?
+      ;;
+    *) die "Unsupported command: $CMD" ;;
+  esac
+fi
+
+log info "Using 1Password item: $ITEM_NAME (id: $ITEM_ID)"
 ITEM_JSON=$(op item get "$ITEM_ID" --format json)
 
-# Extract fields
-HOST=$(echo "$ITEM_JSON" | jq -r '.fields[] | select(.label=="host" or .label=="hostname" or .label=="ip") | .value' | head -n1)
-[[ -z "$HOST" ]] && HOST="$ITEM_NAME"
+# --- Field helpers ---
+get_field() { jq -r --arg k "$1" '.fields[]? | select((.label|ascii_downcase)==($k|ascii_downcase) or (.id|ascii_downcase)==($k|ascii_downcase)) | .value // empty'; }
 
-PORT=$(echo "$ITEM_JSON" | jq -r '.fields[] | select(.label=="port") | .value' || true)
-PORT_ARG=()
-[[ -n "$PORT" ]] && PORT_ARG=(-P "$PORT")
+# --- Extract Fields ---
+HOST=$(echo "$ITEM_JSON" | jq -r '.fields[]? | select((.label|test("^(host|hostname|ip)$"; "i")) or (.id|test("^(host|hostname|ip)$"; "i"))) | .value // empty' | head -n1)
+[[ -z "${HOST}" ]] && HOST="$ITEM_NAME"
 
-USERNAME=$(echo "$ITEM_JSON" | jq -r '.fields[] | select(.label=="username") | .value' || true)
-[[ -z "$USERNAME" ]] && USERNAME="$USER"
+PORT=$(echo "$ITEM_JSON" | get_field port || true)
+USERNAME=$(echo "$ITEM_JSON" | get_field username || true)
+[[ -z "${USERNAME:-}" ]] && USERNAME="$USER"
 
-# SSH URI
-build_uri() {
-  echo "$USERNAME@$HOST"
+URI="${USERNAME}@${HOST}"
+
+# --- SSH Key Handling ---
+# Find a referenced item id (linked SSH key) from a REFERENCE field
+KEY_REF=$(echo "$ITEM_JSON" | jq -r '.fields[]? | select(.type=="REFERENCE") | .value // empty' | head -n1 || true)
+KEY_PATH=""
+
+cleanup() { [[ -n "${KEY_PATH:-}" && -f "${KEY_PATH}" ]] && shred -u "$KEY_PATH" 2>/dev/null || rm -f "$KEY_PATH" 2>/dev/null || true; }
+trap cleanup EXIT INT TERM
+
+if [[ -n "${KEY_REF:-}" ]]; then
+  log info "Found linked item reference: $KEY_REF"
+  KEY_ITEM=$(op item get "$KEY_REF" --format json)
+  KEY_NAME=$(echo "$KEY_ITEM" | jq -r '.title // "key"')
+  KEY_PRIV=$(echo "$KEY_ITEM" | jq -r '(.fields[]? | select((.id=="private_key") or (.label|ascii_downcase=="private key")) | .value) // empty')
+
+  if [[ -n "$KEY_PRIV" && "$KEY_PRIV" != "null" ]]; then
+    KEY_PATH=$(mktemp -t "1p_${KEY_NAME//[^A-Za-z0-9_.-]/_}.XXXXXX")
+    printf "%s\n" "$KEY_PRIV" >"$KEY_PATH"
+    chmod 600 "$KEY_PATH"
+    log info "Using private key from linked item (saved to temp file)."
+  else
+    log warn "Linked item '$KEY_NAME' does not contain a 'private_key' field. Falling back to password if available."
+  fi
+fi
+
+# --- Password (fallback) ---
+PASS=$(echo "$ITEM_JSON" | get_field password || true)
+
+# --- Build common option sets ---
+ssh_base_opts=("-o" "IdentitiesOnly=yes")
+[[ -n "${PORT:-}" ]] && ssh_base_opts+=("-p" "$PORT")
+
+if [[ -n "${KEY_PATH:-}" && -f "$KEY_PATH" ]]; then
+  ssh_base_opts+=("-o" "IdentityFile=${KEY_PATH}")
+fi
+
+# --- Helpers for scp/rsync arg rewriting ---
+replace_placeholders() {
+  local replaced=()
+  local needle="$ITEM_NAME:"
+  local repl="${URI}:"
+  for arg in "$@"; do
+    if [[ "$arg" == *"$needle"* ]]; then
+      arg="${arg//${needle}/${repl}}"
+    fi
+    replaced+=("$arg")
+  done
+  printf '%s\n' "${replaced[@]}"
 }
 
-# Key reference
-KEY_ID=$(echo "$ITEM_JSON" | jq -r '.fields[] | select(.type=="REFERENCE") | .value' || true)
-if [[ -n "$KEY_ID" ]]; then
-  log info "Found SSH Key reference: $KEY_ID"
-  KEY_ITEM=$(op item get "$KEY_ID" --format json)
-  KEY_NAME=$(echo "$KEY_ITEM" | jq -r '.title')
-  KEY_PUB=$(echo "$KEY_ITEM" | jq -r '.fields[] | select(.id=="public_key") | .value')
-  KEY_PATH="$SSH_DIR/1p_${KEY_NAME}.pub"
+# --- Execute ---
+log info "Command: $CMD; Host: $HOST; User: $USERNAME${PORT:+; Port: $PORT}"
 
-  if [[ ! -f "$KEY_PATH" ]]; then
-    log info "Downloading public key to $KEY_PATH"
-    echo "$KEY_PUB" > "$KEY_PATH"
-    chmod 600 "$KEY_PATH"
-  fi
-fi
-
-# Execute command
-URI=$(build_uri)
-
-if [[ -f "$KEY_PATH" ]]; then
-  log info "Using SSH key for $ITEM_NAME"
-  case "$CMD" in
-    ssh) ssh -o IdentitiesOnly=yes -i "$KEY_PATH" "${PORT_ARG[@]}" "$URI" "${CMD_ARGS[@]}" ;;
-    scp) scp -i "$KEY_PATH" "${CMD_ARGS[@]}" ;;
-    rsync) rsync -e "ssh -i $KEY_PATH" "${CMD_ARGS[@]}" ;;
-    sftp) sftp -i "$KEY_PATH" "${PORT_ARG[@]}" "$URI" ;;
-    *) log error "Unsupported command: $CMD"; exit 1 ;;
-  esac
-else
-  PASS=$(echo "$ITEM_JSON" | jq -r '.fields[] | select(.label=="password") | .value' || true)
-  if [[ -z "$USERNAME" || -z "$PASS" ]]; then
-    log error "Missing required fields (username/password) in 1Password item."
-    exit 1
-  fi
-  log info "Using password for $ITEM_NAME"
-  case "$CMD" in
-    ssh)    SSH_AUTH_SOCK=none sshpass -p "$PASS" ssh -o IdentitiesOnly=yes "${PORT_ARG[@]}" "$URI" "${CMD_ARGS[@]}" ;;
-    scp)    SSH_AUTH_SOCK=none sshpass -p "$PASS" scp "${CMD_ARGS[@]}" ;;
-    rsync)  SSH_AUTH_SOCK=none sshpass -p "$PASS" rsync -e "ssh" "${CMD_ARGS[@]}" ;;
-    sftp)   SSH_AUTH_SOCK=none sshpass -p "$PASS" sftp "${PORT_ARG[@]}" "$URI" ;;
-    *) log error "Unsupported command: $CMD"; exit 1 ;;
-  esac
-fi
+case "$CMD" in
+  ssh)
+    if [[ -n "${KEY_PATH:-}" ]]; then
+      ssh "${ssh_base_opts[@]}" "$URI" "${CMD_ARGS[@]}"
+    elif [[ -n "${PASS:-}" ]]; then
+      require_cmd sshpass
+      SSH_AUTH_SOCK=none sshpass -p "$PASS" ssh "${ssh_base_opts[@]}" "$URI" "${CMD_ARGS[@]}"
+    else
+      die "No private key or password available for '$ITEM_NAME'"
+    fi
+    ;;
+  sftp)
+    # sftp uses -P for port; pass identity via -o IdentityFile
+    sftp_opts=()
+    [[ -n "${PORT:-}" ]] && sftp_opts+=("-P" "$PORT")
+    sftp_opts+=("-o" "IdentitiesOnly=yes")
+    [[ -n "${KEY_PATH:-}" ]] && sftp_opts+=("-o" "IdentityFile=${KEY_PATH}")
+    if [[ -n "${KEY_PATH:-}" ]]; then
+      sftp "${sftp_opts[@]}" "$URI"
+    elif [[ -n "${PASS:-}" ]]; then
+      require_cmd sshpass
+      SSH_AUTH_SOCK=none sshpass -p "$PASS" sftp "${sftp_opts[@]}" "$URI"
+    else
+      die "No private key or password available for '$ITEM_NAME'"
+    fi
+    ;;
+  scp)
+    # scp uses -P for port; pass identity via -o IdentityFile
+    scp_opts=("-o" "IdentitiesOnly=yes")
+    [[ -n "${KEY_PATH:-}" ]] && scp_opts+=("-o" "IdentityFile=${KEY_PATH}")
+    [[ -n "${PORT:-}" ]] && scp_opts+=("-P" "$PORT")
+    mapfile -t NEW_ARGS < <(replace_placeholders "${CMD_ARGS[@]}")
+    if [[ -n "${KEY_PATH:-}" ]]; then
+      scp "${scp_opts[@]}" "${NEW_ARGS[@]}"
+    elif [[ -n "${PASS:-}" ]]; then
+      require_cmd sshpass
+      SSH_AUTH_SOCK=none sshpass -p "$PASS" scp "${scp_opts[@]}" "${NEW_ARGS[@]}"
+    else
+      die "No private key or password available for '$ITEM_NAME'"
+    fi
+    ;;
+  rsync)
+    # rsync via ssh transports port and identity through -e
+    ssh_cmd=(ssh "-o" "IdentitiesOnly=yes")
+    [[ -n "${KEY_PATH:-}" ]] && ssh_cmd+=("-o" "IdentityFile=${KEY_PATH}")
+    [[ -n "${PORT:-}" ]] && ssh_cmd+=("-p" "$PORT")
+    mapfile -t NEW_ARGS < <(replace_placeholders "${CMD_ARGS[@]}")
+    if [[ -n "${KEY_PATH:-}" ]]; then
+      rsync -e "${ssh_cmd[*]}" "${NEW_ARGS[@]}"
+    elif [[ -n "${PASS:-}" ]]; then
+      require_cmd sshpass
+      SSH_AUTH_SOCK=none sshpass -p "$PASS" rsync -e "${ssh_cmd[*]}" "${NEW_ARGS[@]}"
+    else
+      die "No private key or password available for '$ITEM_NAME'"
+    fi
+    ;;
+  *)
+    die "Unsupported command: $CMD"
+    ;;
+esac

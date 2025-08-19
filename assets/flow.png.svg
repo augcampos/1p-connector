@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="220" viewBox="0 0 820 220">
+  <style>
+    .title { font: 600 18px sans-serif; }
+    .label { font: 13px sans-serif; }
+    .node { fill:#edf2f7; stroke:#cbd5e1; stroke-width:1.2; }
+    .arrow { stroke:#4a5568; stroke-width:2; fill:none; marker-end:url(#arrowhead);} 
+  </style>
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4a5568" />
+    </marker>
+  </defs>
+  <rect x="8" y="8" width="804" height="204" rx="8" fill="#fff" stroke="#e2e8f0"/>
+  <text x="24" y="34" class="title">1p-connector — flow</text>
+
+  <g>
+    <rect class="node" x="28" y="56" width="180" height="56" rx="8"/>
+    <text x="38" y="86" class="label">1Password CLI (op)</text>
+    <text x="38" y="102" class="label">fetch Server item</text>
+
+    <rect class="node" x="260" y="36" width="220" height="96" rx="8"/>
+    <text x="280" y="68" class="label">1p-connector</text>
+    <text x="280" y="86" class="label">parse JSON (jq)</text>
+    <text x="280" y="102" class="label">decide auth method</text>
+
+    <rect class="node" x="520" y="56" width="220" height="56" rx="8"/>
+    <text x="540" y="86" class="label">ssh / scp / rsync / sftp</text>
+
+    <path class="arrow" d="M208 84 L260 84"/>
+    <path class="arrow" d="M480 84 L520 84"/>
+
+    <rect x="28" y="132" width="180" height="56" rx="8" fill="#fff" stroke="#fcd34d"/>
+    <text x="38" y="162" class="label">sshpass (password fallback)</text>
+
+    <path class="arrow" d="M380 96 L380 132 L208 132"/>
+  </g>
+</svg>

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="220" viewBox="0 0 720 220">
+  <style>
+    .title { font: 600 18px sans-serif; }
+    .label { font: 14px sans-serif; }
+    .box { fill:#f7fafc; stroke:#cbd5e1; stroke-width:1.5; }
+  </style>
+  <rect x="10" y="10" width="700" height="200" rx="8" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="28" y="38" class="title">1Password Server item — common fields</text>
+
+  <g transform="translate(28,56)">
+    <rect class="box" x="0" y="0" width="320" height="36" rx="6"/>
+    <text x="12" y="24" class="label">Name — item identifier (used as CLI NAME)</text>
+
+    <rect class="box" x="360" y="0" width="320" height="36" rx="6"/>
+    <text x="372" y="24" class="label">Host / IP — remote address</text>
+
+    <rect class="box" x="0" y="54" width="320" height="36" rx="6"/>
+    <text x="12" y="78" class="label">Username — remote user (optional)</text>
+
+    <rect class="box" x="360" y="54" width="320" height="36" rx="6"/>
+    <text x="372" y="78" class="label">Related item — SSH key (preferred)</text>
+
+    <rect class="box" x="0" y="108" width="320" height="36" rx="6"/>
+    <text x="12" y="132" class="label">Password — used if no SSH key available</text>
+
+    <rect class="box" x="360" y="108" width="320" height="36" rx="6"/>
+    <text x="372" y="132" class="label">Notes / Tags — optional metadata</text>
+  </g>
+</svg>

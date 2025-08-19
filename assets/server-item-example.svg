@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="320" viewBox="0 0 760 320">
+  <style>
+    .card { fill:#ffffff; stroke:#e2e8f0; stroke-width:1.5; rx:10; }
+    .title { font: 700 18px/1.2 Inter, Roboto, sans-serif; fill:#1f2937; }
+    .label { font: 600 12px/1.2 Inter, Roboto, sans-serif; fill:#4b5563; }
+    .value { font: 600 14px/1.2 monospace; fill:#0f172a; }
+    .muted { font: 12px/1.2 Inter, Roboto, sans-serif; fill:#6b7280; }
+    .key { fill:#f1f5f9; stroke:#cbd5e1; }
+  </style>
+  <rect x="8" y="8" width="744" height="304" rx="12" fill="#fbfdff" stroke="#e6eef8"/>
+  <text x="28" y="40" class="title">Example 1Password Server item</text>
+
+  <g transform="translate(28,64)">
+    <rect class="card" x="0" y="0" width="700" height="240" rx="8"/>
+
+    <text x="18" y="28" class="label">Item name</text>
+    <text x="18" y="48" class="value">my-db</text>
+
+    <text x="18" y="84" class="label">Host / IP</text>
+    <text x="18" y="104" class="value">db.example.com</text>
+
+    <text x="18" y="140" class="label">Username</text>
+    <text x="18" y="160" class="value">ubuntu</text>
+
+    <text x="360" y="28" class="label">Related item (SSH key)</text>
+    <rect class="key" x="360" y="34" width="320" height="30" rx="6"/>
+    <text x="376" y="55" class="value">my-db-key</text>
+    <text x="376" y="70" class="muted">(stored as a related SSH Key item)</text>
+
+    <text x="360" y="104" class="label">Password (fallback)</text>
+    <rect class="key" x="360" y="110" width="320" height="28" rx="6"/>
+    <text x="376" y="130" class="value">********</text>
+    <text x="376" y="146" class="muted">(used only when no SSH key is available)</text>
+
+    <text x="18" y="204" class="muted">Notes: Example server used for staging; tag with &quot;env:staging&quot;</text>
+  </g>
+</svg>

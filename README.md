@@ -43,7 +43,7 @@ sudo mv 1p-connector /usr/local/bin/
 
 ## How to use
 
-Create a 1Passwrod Server item  in 1Password for each host you want to connect to. Use the following fields:
+Create a [1Password Server item](https://support.1password.com/item-categories/#server) for each host you want to connect to. Use the following fields:
 
 - Name: local identifier to use with the CLI (e.g. my-db)
 - Username: remote user (optional — defaults to current user)
@@ -70,6 +70,18 @@ Examples (replace NAME with your 1Password Server item name):
 Behavior notes:
 - If a related SSH key exists, it will be used as the SSH identity file.
 - If no key is present, the script will attempt password auth (requiring `sshpass`).
+
+## Diagrams
+
+Visual reference for 1Password Server item fields and the connector flow:
+
+![Server item fields](assets/server-item-fields.svg)
+
+![Connector flow](assets/flow.png.svg)
+
+Example Server item (how a real item might look in 1Password):
+
+![Server item example](assets/server-item-example.svg)
 
 ## Troubleshooting & Security
 - The installer may attempt to install `op`, `jq`, and `sshpass` using your package manager; if automatic install fails, install them manually.

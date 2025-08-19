@@ -1,21 +1,92 @@
-# 1p-connector
-Bash Script to serve as a connector from 1Password manager and command tools ssh, scp, rsync sftp, etc.
+## 1p-connector
 
-# Install
+Lightweight connector that uses 1Password Server items to drive SSH, SCP, RSYNC and SFTP sessions.
 
-## All in one script
+This tool fetches connection data (host, user, SSH key or password) from 1Password via the 1Password CLI and runs the requested remote command using the appropriate authentication method.
+
+## Features
+- Use 1Password Server items as connection profiles
+- Automatically use a related SSH key (if present) or fall back to password-based auth
+- Simple wrapper for ssh/scp/rsync/sftp commands
+- Minimal dependencies and a small installer for quick setup
+
+## Requirements
+- A 1Password account and the relevant Server items saved in a vault
+- 1Password CLI (`op`)
+- `jq` (JSON processor)
+- `sshpass` (only required when using password-based SSH)
+
+Install these with your system package manager (apt/dnf/pacman/brew/etc.) or allow the installer to attempt automatic installation.
+
+## Install
+
+### All-in-one (download and run the installer):
+
 ```sh
-- wget -qO- https://raw.githubusercontent.com/augcampos/1p-connector/main/install.sh  | sh -s --
+wget -qO- https://raw.githubusercontent.com/augcampos/1p-connector/main/install.sh | sh -s --
 ```
-OR
+
+### Manual install:
+
+1. Download `1p-connector` from the releases or repository.
+2. Make it executable:
+
 ```sh
-- curl -fsSL https://raw.githubusercontent.com/augcampos/1p-connector/main/install.sh | sh -s --
+chmod +x 1p-connector
 ```
 
-## Manual Install 
-- Download 1p-connector
-- change to executable permission `chmod +x 1p-connector`
-- Copy/move 1p-connector to a folder in your path(check `echo $PATH`) like any of these: /usr/local/bin, /usr/bin, /sbin, /bin, (or any other you like).
+3. Move it into a directory in your PATH, for example:
 
-# Remove
-- Delete the 1p-connector from the folder you copied in the install process.
+```sh
+sudo mv 1p-connector /usr/local/bin/
+```
+
+## How to use
+
+Create a 1Passwrod Server item  in 1Password for each host you want to connect to. Use the following fields:
+
+- Name: local identifier to use with the CLI (e.g. my-db)
+- Username: remote user (optional — defaults to current user)
+- Host / IP: remote host
+- Related item: associate an SSH key item if you use key-based auth
+- Password: used when no SSH key is available
+
+Examples (replace NAME with your 1Password Server item name):
+
+```sh
+# SSH into the host
+1p-connector ssh NAME
+
+# Run a remote command
+1p-connector ssh NAME -- ls -la /var/www
+
+# Copy from remote to local
+1p-connector scp NAME:/remote/path ./local/path
+
+# Sync remote directory via rsync
+1p-connector rsync NAME:/remote/dir ./local/dir
+```
+
+Behavior notes:
+- If a related SSH key exists, it will be used as the SSH identity file.
+- If no key is present, the script will attempt password auth (requiring `sshpass`).
+
+## Troubleshooting & Security
+- The installer may attempt to install `op`, `jq`, and `sshpass` using your package manager; if automatic install fails, install them manually.
+- Piping remote scripts directly to `sh` executes code from the internet — inspect the script before running if you require assurance.
+- Ensure `op` is authenticated (signed in) before running commands that need secrets from 1Password.
+
+## Uninstall
+
+Remove the installed binary (adjust path if you used a different install location):
+
+```sh
+sudo rm -f /usr/local/bin/1p-connector
+```
+
+## Contributing
+
+Issues and PRs are welcome. Please open small, focused PRs and include tests when applicable.
+
+## License
+See the `LICENSE` file in this repository.

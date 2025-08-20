@@ -1,6 +1,6 @@
 ## 1p-connector
 
-Lightweight connector that uses 1Password Server items to drive SSH, SCP, RSYNC and SFTP sessions.
+Lightweight bash script connector that uses 1Password Server items to drive SSH, SCP, RSYNC and SFTP sessions.
 
 This tool fetches connection data (host, user, SSH key or password) from 1Password via the 1Password CLI and runs the requested remote command using the appropriate authentication method.
 
@@ -9,6 +9,9 @@ This tool fetches connection data (host, user, SSH key or password) from 1Passwo
 - Automatically use a related SSH key (if present) or fall back to password-based auth
 - Simple wrapper for ssh/scp/rsync/sftp commands
 - Minimal dependencies and a small installer for quick setup
+- Download **only** SSH public keys and store the SSH public key on disk, as a cache, for future use
+- Fix [SSH server six-key limit](https://developer.1password.com/docs/ssh/agent/advanced#ssh-server-six-key-limit)
+- Fix the SSH problem [Too many authentication failures error](https://developer.1password.com/docs/ssh/agent/advanced#match-key-with-host)
 
 ## Requirements
 - A 1Password account and the relevant Server items saved in a vault

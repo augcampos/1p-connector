@@ -70,7 +70,7 @@ Examples (replace NAME with your 1Password Server item name):
 ```
 
 Behavior notes:
-- If a related SSH key exists, it will be used as the SSH identity file. The private key is written to a secure temporary file (0600) and deleted on exit.
+- If a related SSH key exists, it will be used as the SSH identity file. The public key is written to a secure temporary file (0600) and deleted on exit.
 - If no key is present, the script will attempt password auth (requires `sshpass`).
 - For `scp` and `rsync`, arguments that start with `NAME:` are rewritten to `user@host:` automatically.
 - Port is respected for `ssh` (`-p`), `sftp`/`scp` (`-P`), and via `-e "ssh -p ..."` for `rsync`.

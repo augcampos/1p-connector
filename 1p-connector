@@ -119,16 +119,16 @@ if [[ -n "${KEY_REF:-}" ]]; then
   log info "Found linked item reference: $KEY_REF"
   KEY_ITEM=$(op item get "$KEY_REF" --format json)
   KEY_NAME=$(echo "$KEY_ITEM" | jq -r '.title // "key"')
-  KEY_PRIV=$(echo "$KEY_ITEM" | jq -r '(.fields[]? |  select(.id=="public_key") | .value) // empty')
+  KEY_PUB=$(echo "$KEY_ITEM" | jq -r '(.fields[]? |  select(.id=="public_key") | .value) // empty')
 
-  if [[ -n "$KEY_PRIV" && "$KEY_PRIV" != "null" ]]; then
+  if [[ -n "$KEY_PUB" && "$KEY_PUB" != "null" ]]; then
     # KEY_PATH=$(mktemp -t "1p_${KEY_NAME//[^A-Za-z0-9_.-]/_}.XXXXXX")
     KEY_PATH="$SSH_DIR/1p_${KEY_NAME}.pub"
-    printf "%s\n" "$KEY_PRIV" >"$KEY_PATH"
+    printf "%s\n" "$KEY_PUB" >"$KEY_PATH"
     chmod 600 "$KEY_PATH"
-    log info "Using private key from linked item (saved to temp file)."
+    log info "Using public key from linked item (saved to temp file)."
   else
-    log warn "Linked item '$KEY_NAME' does not contain a 'private_key' field. Falling back to password if available."
+    log warn "Linked item '$KEY_NAME' does not contain a 'public_key' field. Falling back to password if available."
   fi
 fi
 

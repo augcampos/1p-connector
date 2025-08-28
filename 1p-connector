@@ -166,7 +166,7 @@ case "$CMD" in
       ssh "${ssh_base_opts[@]}" "$URI" "${CMD_ARGS[@]}"
     elif [[ -n "${PASS:-}" ]]; then
       require_cmd sshpass
-      SSH_AUTH_SOCK=none sshpass -p "$PASS" ssh "${ssh_base_opts[@]}" "$URI" "${CMD_ARGS[@]}"
+      SSHPASS="$PASS" SSH_AUTH_SOCK=none sshpass -e ssh "${ssh_base_opts[@]}" "$URI" "${CMD_ARGS[@]}"
     else
       die "No private key or password available for '$ITEM_NAME'"
     fi
